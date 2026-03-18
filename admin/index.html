@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vault Admin — Gestion des Documents</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #0b0e13;
+            --surface: #131720;
+            --surface2: #1a2030;
+            --border: #242d3f;
+            --accent: #00c896;
+            --accent2: #0099ff;
+            --danger: #ff4a4a;
+            --warn: #ffaa00;
+            --text: #e2e8f0;
+            --muted: #6b7a99;
+            --mono: 'IBM Plex Mono', monospace;
+            --sans: 'IBM Plex Sans', sans-serif;
+        }
+
+        body {
+            font-family: var(--sans);
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* ── LOGIN ── */
+        #loginScreen {
+            position: fixed; inset: 0;
+            background: var(--bg);
+            background-image: radial-gradient(ellipse 60% 50% at 50% 50%, rgba(0,200,150,0.05) 0%, transparent 70%);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 100;
+        }
+
+        .login-box {
+            width: 380px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 40px;
+            background: var(--surface);
+            box-shadow: 0 0 60px rgba(0,200,150,0.08);
+            animation: fadeUp 0.4s ease;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .login-logo { text-align: center; margin-bottom: 32px; }
+        .login-logo .icon { font-size: 44px; display: block; margin-bottom: 8px; }
+        .login-logo h1 {
+            font-family: var(--mono); font-size: 18px; font-weight: 600;
+            color: var(--accent); letter-spacing: 0.15em;
+        }
+        .login-logo p { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+        .field-group { margin-bottom: 16px; }
+        .field-group label {
+            display: block; font-family: var(--mono); font-size: 11px;
+            color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px;
+        }
+        .field-group input {
+            width: 100%; background: var(--bg); border: 1px solid var(--border);
+            border-radius: 6px; padding: 10px 14px; font-family: var(--mono);
+            font-size: 14px; color: var(--text); outline: none; transition: border-color 0.2s;
+        }
+        .field-group input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,200,150,0.1); }
+
+        .btn-primary {
+            width: 100%; padding: 12px; background: var(--accent); color: #000;
+            font-family: var(--mono); font-size: 13px; font-weight: 600;
+            letter-spacing: 0.1em; text-transform: uppercase; border: none;
+            border-radius: 6px; cursor: pointer; transition: all 0.2s; margin-top: 8px;
+        }
+        .btn-primary:hover:not(:disabled) { background: #00e8ae; transform: translateY(-1px); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        .login-error {
+            margin-top: 12px; padding: 10px; background: rgba(255,74,74,0.1);
+            border: 1px solid rgba(255,74,74,0.3); border-radius: 6px;
+            font-family: var(--mono); font-size: 12px; color: var(--danger);
+            text-align: center; display: none;
+        }
+
+        .lock-warning {
+            margin-top: 10px; font-family: var(--mono); font-size: 11px;
+            color: var(--warn); text-align: center; display: none;
+        }
+
+        .back-link {
+            display: block; text-align: center; margin-top: 16px;
+            font-family: var(--mono); font-size: 11px; color: var(--muted);
+            text-decoration: none; transition: color 0.2s;
+        }
+        .back-link:hover { color: var(--text); }
+
+        /* ── APP ── */
+        #app { display: none; }
+
+        .topbar {
+            height: 56px; background: var(--surface); border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; padding: 0 24px; gap: 16px;
+            position: sticky; top: 0; z-index: 10;
+        }
+        .topbar-brand { font-family: var(--mono); font-size: 14px; font-weight: 600; color: var(--accent); letter-spacing: 0.1em; }
+        .topbar-tag { font-family: var(--mono); font-size: 10px; background: rgba(0,200,150,0.15); color: var(--accent); padding: 2px 8px; border-radius: 3px; }
+        .topbar-spacer { flex: 1; }
+        .topbar-session { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+        #logoutBtn {
+            padding: 6px 14px; background: transparent; border: 1px solid var(--border);
+            border-radius: 5px; color: var(--muted); font-family: var(--mono);
+            font-size: 11px; cursor: pointer; transition: all 0.2s;
+        }
+        #logoutBtn:hover { border-color: var(--danger); color: var(--danger); }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            min-height: calc(100vh - 56px);
+        }
+
+        /* ── SIDEBAR ── */
+        .sidebar {
+            background: var(--surface); border-right: 1px solid var(--border);
+            padding: 24px; display: flex; flex-direction: column; gap: 20px;
+        }
+
+        .section-title {
+            font-family: var(--mono); font-size: 10px; color: var(--muted);
+            text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 10px;
+        }
+
+        .upload-zone {
+            border: 2px dashed var(--border); border-radius: 8px; padding: 20px;
+            text-align: center; cursor: pointer; transition: all 0.2s; position: relative;
+        }
+        .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); background: rgba(0,200,150,0.05); }
+        .upload-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+        .upload-zone .icon { font-size: 26px; margin-bottom: 6px; }
+        .upload-zone p { font-size: 12px; color: var(--muted); }
+        .upload-zone strong { color: var(--accent); font-size: 11px; font-family: var(--mono); }
+
+        .enc-bar { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+        .enc-status { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+        .enc-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+        .enc-dot.active { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+
+        .search-input {
+            width: 100%; background: var(--bg); border: 1px solid var(--border);
+            border-radius: 6px; padding: 8px 12px; font-family: var(--mono);
+            font-size: 12px; color: var(--text); outline: none; transition: border-color 0.2s;
+        }
+        .search-input:focus { border-color: var(--accent); }
+
+        .file-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
+
+        .file-item {
+            background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+            padding: 10px 12px; display: flex; align-items: center; gap: 10px;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .file-item:hover { border-color: var(--accent2); }
+        .file-item.active { border-color: var(--accent); background: rgba(0,200,150,0.05); }
+        .file-item-info { flex: 1; min-width: 0; }
+        .file-item-name { font-family: var(--mono); font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .file-item-meta { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+        .toggle-vis {
+            width: 36px; height: 20px; background: var(--border); border-radius: 10px;
+            position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; border: none;
+        }
+        .toggle-vis.on { background: var(--accent); }
+        .toggle-vis::after {
+            content: ''; position: absolute; width: 14px; height: 14px; background: white;
+            border-radius: 50%; top: 3px; left: 3px; transition: transform 0.2s;
+        }
+        .toggle-vis.on::after { transform: translateX(16px); }
+        .vis-label { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+        .vis-label.on { color: var(--accent); }
+
+        /* ── MAIN ── */
+        .main-area { padding: 32px; display: flex; flex-direction: column; gap: 20px; }
+
+        .page-header h1 { font-family: var(--mono); font-size: 22px; font-weight: 600; }
+        .page-header p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+        .stats-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+        .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; }
+        .stat-value { font-family: var(--mono); font-size: 28px; font-weight: 600; color: var(--accent); }
+        .stat-label { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+        .viewer-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; flex: 1; }
+        .viewer-card-header {
+            background: var(--surface2); border-bottom: 1px solid var(--border);
+            padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        }
+        .viewer-card-title { font-family: var(--mono); font-size: 13px; color: var(--text); display: flex; align-items: center; gap: 8px; }
+        .enc-badge { font-family: var(--mono); font-size: 10px; background: rgba(0,200,150,0.15); color: var(--accent); padding: 2px 6px; border-radius: 3px; }
+        .viewer-actions { display: flex; gap: 8px; }
+
+        .btn-sm {
+            padding: 6px 12px; border-radius: 5px; font-family: var(--mono); font-size: 11px;
+            cursor: pointer; border: 1px solid var(--border); background: transparent;
+            color: var(--text); transition: all 0.2s;
+        }
+        .btn-sm:hover:not(:disabled) { border-color: var(--accent2); color: var(--accent2); }
+        .btn-sm:disabled { opacity: 0.3; cursor: not-allowed; }
+
+        #adminContent {
+            font-family: var(--mono); font-size: 13px; line-height: 1.7;
+            padding: 24px; white-space: pre-wrap; min-height: 300px;
+            max-height: 500px; overflow-y: auto; color: var(--text);
+        }
+        .empty-state-msg { color: var(--muted); font-style: italic; }
+
+        #toast {
+            position: fixed; bottom: 24px; right: 24px;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+            padding: 12px 18px; font-family: var(--mono); font-size: 12px; color: var(--text);
+            transform: translateY(80px); opacity: 0; transition: all 0.3s; z-index: 999;
+        }
+        #toast.show { transform: translateY(0); opacity: 1; }
+        #toast.success { border-color: var(--accent); color: var(--accent); }
+        #toast.error   { border-color: var(--danger); color: var(--danger); }
+
+        .empty-files { color: var(--muted); font-family: var(--mono); font-size: 12px; text-align: center; padding: 20px; }
+
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+    <div class="login-box">
+        <div class="login-logo">
+            <span class="icon">🔐</span>
+            <h1>VAULT ADMIN</h1>
+            <p>Accès restreint — Administrateurs uniquement</p>
+        </div>
+
+        <div class="field-group">
+            <label>Identifiant</label>
+            <input type="text" id="loginUser" placeholder="admin" autocomplete="off">
+        </div>
+        <div class="field-group">
+            <label>Mot de passe</label>
+            <input type="password" id="loginPass" placeholder="••••••••">
+        </div>
+
+        <button class="btn-primary" id="loginBtn">Accéder au tableau de bord</button>
+        <div class="lock-warning" id="lockWarning"></div>
+        <div class="login-error" id="loginError">⛔ Identifiants incorrects</div>
+
+        <a href="../client/index.html" class="back-link">← Retour à la page documents</a>
+    </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+    <div class="topbar">
+        <span class="topbar-brand">VAULT</span>
+        <span class="topbar-tag">ADMIN</span>
+        <div class="topbar-spacer"></div>
+        <span class="topbar-session" id="sessionInfo"></span>
+        <button id="logoutBtn">⬡ Déconnexion</button>
+    </div>
+
+    <div class="layout">
+        <div class="sidebar">
+
+            <div>
+                <div class="section-title">▸ Chiffrement & Import</div>
+                <div class="enc-bar" style="margin-bottom:12px;">
+                    <div class="field-group" style="margin-bottom:0;">
+                        <label>Clé de chiffrement AES-256</label>
+                        <input type="password" id="encKey" placeholder="Clé partagée avec les clients" autocomplete="off">
+                    </div>
+                    <div class="enc-status">
+                        <div class="enc-dot" id="encDot"></div>
+                        <span id="encStatusText" style="font-family:var(--mono);font-size:11px;color:var(--muted);">Aucune clé définie</span>
+                    </div>
+                </div>
+
+                <div class="upload-zone" id="uploadZone">
+                    <input type="file" id="fileInput" accept=".txt" multiple>
+                    <div class="icon">📂</div>
+                    <p>Glissez vos fichiers TXT<br><strong>ou cliquez pour parcourir</strong></p>
+                </div>
+            </div>
+
+            <div>
+                <div class="section-title">▸ Fichiers chargés</div>
+                <input type="text" class="search-input" id="adminSearch" placeholder="🔍 Rechercher…" style="margin-bottom:10px;">
+                <div class="file-list" id="adminFileList">
+                    <div class="empty-files">Aucun fichier chargé</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-area">
+            <div class="page-header">
+                <h1>Tableau de bord</h1>
+                <p>Gestion sécurisée des rapports clients</p>
+            </div>
+
+            <div class="stats-bar">
+                <div class="stat-card">
+                    <div class="stat-value" id="statTotal">0</div>
+                    <div class="stat-label">Fichiers chargés</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="statVisible">0</div>
+                    <div class="stat-label">Visibles clients</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="statEnc">—</div>
+                    <div class="stat-label">Chiffrement AES-256</div>
+                </div>
+            </div>
+
+            <div class="viewer-card">
+                <div class="viewer-card-header">
+                    <div class="viewer-card-title">
+                        <span id="adminFileTitle">Aperçu du fichier</span>
+                        <span class="enc-badge" id="encBadge" style="display:none;">🔒 Chiffré</span>
+                    </div>
+                    <div class="viewer-actions">
+                        <button class="btn-sm" id="adminDownloadRaw" disabled>⬇ Original</button>
+                        <button class="btn-sm" id="adminDownloadEnc" disabled>🔒 Chiffré</button>
+                    </div>
+                </div>
+                <div id="adminContent" class="empty-state-msg">
+Sélectionnez un fichier dans la liste pour afficher son contenu.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  COMPTE ADMIN
+//  hash SHA-256 de "admin1234"
+//  Changer : https://emn178.github.io/online-tools/sha256.html
+// ═══════════════════════════════════════════════
+const ADMIN = {
+    user: "admin",
+    hash: "3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b"
+};
+
+// ═══════════════════════════════════════════════
+//  CRYPTO
+// ═══════════════════════════════════════════════
+async function sha256(str) {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function deriveKey(password) {
+    const enc = new TextEncoder();
+    const km = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
+    return crypto.subtle.deriveKey(
+        { name: "PBKDF2", salt: enc.encode("vault-salt-v1"), iterations: 100000, hash: "SHA-256" },
+        km, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
+    );
+}
+
+async function encryptText(text, password) {
+    const key = await deriveKey(password);
+    const iv  = crypto.getRandomValues(new Uint8Array(12));
+    const ct  = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(text));
+    const combined = new Uint8Array(12 + ct.byteLength);
+    combined.set(iv, 0); combined.set(new Uint8Array(ct), 12);
+    return btoa(String.fromCharCode(...combined));
+}
+
+// ═══════════════════════════════════════════════
+//  AUTH
+// ═══════════════════════════════════════════════
+let failCount = 0;
+let lockUntil = 0;
+
+document.getElementById("loginBtn").addEventListener("click", doLogin);
+document.getElementById("loginPass").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+
+async function doLogin() {
+    const now = Date.now();
+    if (now < lockUntil) {
+        const secs = Math.ceil((lockUntil - now) / 1000);
+        showLockMsg(`⏳ Trop de tentatives. Réessayez dans ${secs}s.`);
+        return;
+    }
+
+    const user = document.getElementById("loginUser").value.trim();
+    const pass = document.getElementById("loginPass").value;
+    const btn  = document.getElementById("loginBtn");
+    btn.disabled = true; btn.textContent = "Vérification…";
+
+    const hash = await sha256(pass);
+
+    if (user === ADMIN.user && hash === ADMIN.hash) {
+        failCount = 0;
+        document.getElementById("loginScreen").style.display = "none";
+        document.getElementById("app").style.display = "block";
+        document.getElementById("sessionInfo").textContent = "Session : " + new Date().toLocaleTimeString("fr-FR");
+        sessionTimeout();
+    } else {
+        failCount++;
+        btn.disabled = false; btn.textContent = "Accéder au tableau de bord";
+        const err = document.getElementById("loginError");
+        err.style.display = "block";
+        setTimeout(() => { err.style.display = "none"; }, 3000);
+
+        if (failCount >= 5) {
+            const delay = Math.min(60000, 5000 * Math.pow(2, failCount - 5));
+            lockUntil = Date.now() + delay;
+            showLockMsg(`⚠️ Bloqué pendant ${delay / 1000}s`);
+            setTimeout(() => { document.getElementById("lockWarning").style.display = "none"; }, delay);
+        }
+    }
+}
+
+function showLockMsg(msg) {
+    const w = document.getElementById("lockWarning");
+    w.textContent = msg; w.style.display = "block";
+}
+
+function sessionTimeout() {
+    setTimeout(() => { location.reload(); }, 30 * 60 * 1000);
+}
+
+document.getElementById("logoutBtn").addEventListener("click", () => { location.reload(); });
+
+// ═══════════════════════════════════════════════
+//  ÉTAT
+// ═══════════════════════════════════════════════
+let files = [];
+let currentIdx = null;
+let encKey = "";
+
+// ═══════════════════════════════════════════════
+//  CLÉ CHIFFREMENT
+// ═══════════════════════════════════════════════
+document.getElementById("encKey").addEventListener("input", function() {
+    encKey = this.value;
+    const dot  = document.getElementById("encDot");
+    const txt  = document.getElementById("encStatusText");
+    const stat = document.getElementById("statEnc");
+
+    if (encKey.length >= 8) {
+        dot.classList.add("active");
+        txt.style.color = "var(--accent)"; txt.textContent = "Clé AES-256 active ✓";
+        stat.textContent = "Actif";
+    } else if (encKey.length > 0) {
+        dot.classList.remove("active");
+        txt.style.color = "var(--warn)"; txt.textContent = "Trop courte (min. 8 car.)";
+        stat.textContent = "Faible";
+    } else {
+        dot.classList.remove("active");
+        txt.style.color = "var(--muted)"; txt.textContent = "Aucune clé définie";
+        stat.textContent = "—";
+    }
+
+    if (currentIdx !== null) {
+        document.getElementById("adminDownloadEnc").disabled = encKey.length < 8;
+        document.getElementById("encBadge").style.display = encKey.length >= 8 ? "inline" : "none";
+    }
+});
+
+// ═══════════════════════════════════════════════
+//  UPLOAD
+// ═══════════════════════════════════════════════
+const uploadZone = document.getElementById("uploadZone");
+const fileInput  = document.getElementById("fileInput");
+
+uploadZone.addEventListener("dragover", e => { e.preventDefault(); uploadZone.classList.add("dragover"); });
+uploadZone.addEventListener("dragleave", () => uploadZone.classList.remove("dragover"));
+uploadZone.addEventListener("drop", e => {
+    e.preventDefault(); uploadZone.classList.remove("dragover");
+    handleFiles(Array.from(e.dataTransfer.files).filter(f => f.name.endsWith(".txt")));
+});
+fileInput.addEventListener("change", e => { handleFiles(Array.from(e.target.files)); e.target.value = ""; });
+
+function handleFiles(newFiles) {
+    newFiles.forEach(f => {
+        const reader = new FileReader();
+        reader.onload = ev => {
+            files.push({ name: f.name, content: ev.target.result, visible: true });
+            renderAll(); showToast("📄 " + f.name + " chargé", "success");
+        };
+        reader.readAsText(f, "UTF-8");
+    });
+}
+
+// ═══════════════════════════════════════════════
+//  RENDU
+// ═══════════════════════════════════════════════
+function renderAll() {
+    const search = document.getElementById("adminSearch").value.toLowerCase();
+    const list   = document.getElementById("adminFileList");
+    list.innerHTML = "";
+
+    const filtered = files.filter(f => f.name.toLowerCase().includes(search));
+
+    if (filtered.length === 0) {
+        list.innerHTML = '<div class="empty-files">Aucun fichier disponible</div>';
+    } else {
+        filtered.forEach(f => {
+            const idx  = files.indexOf(f);
+            const item = document.createElement("div");
+            item.className = "file-item" + (idx === currentIdx ? " active" : "");
+            item.innerHTML = `
+                <span>${f.visible ? "📄" : "🚫"}</span>
+                <div class="file-item-info">
+                    <div class="file-item-name">${f.name}</div>
+                    <div class="file-item-meta">${(new Blob([f.content]).size/1024).toFixed(1)} Ko · ${f.visible ? "Visible" : "Masqué"}</div>
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+                    <button class="toggle-vis ${f.visible ? 'on' : ''}" data-idx="${idx}"></button>
+                    <span class="vis-label ${f.visible ? 'on' : ''}">${f.visible ? "ON" : "OFF"}</span>
+                </div>
+            `;
+            item.addEventListener("click", e => {
+                if (!e.target.classList.contains("toggle-vis")) {
+                    currentIdx = idx; showPreview(idx); renderAll();
+                }
+            });
+            list.appendChild(item);
+        });
+
+        document.querySelectorAll(".toggle-vis").forEach(btn => {
+            btn.addEventListener("click", e => {
+                e.stopPropagation();
+                const i = parseInt(btn.dataset.idx);
+                files[i].visible = !files[i].visible;
+                renderAll();
+                showToast(files[i].visible ? "✅ Fichier rendu visible" : "🚫 Fichier masqué", "success");
+            });
+        });
+    }
+
+    document.getElementById("statTotal").textContent   = files.length;
+    document.getElementById("statVisible").textContent = files.filter(f => f.visible).length;
+}
+
+function showPreview(idx) {
+    const f = files[idx];
+    document.getElementById("adminFileTitle").textContent = "📄 " + f.name;
+    document.getElementById("adminContent").classList.remove("empty-state-msg");
+    document.getElementById("adminContent").textContent = f.content;
+    document.getElementById("adminDownloadRaw").disabled = false;
+    document.getElementById("adminDownloadEnc").disabled = encKey.length < 8;
+    document.getElementById("encBadge").style.display = encKey.length >= 8 ? "inline" : "none";
+}
+
+// ═══════════════════════════════════════════════
+//  TÉLÉCHARGEMENTS
+// ═══════════════════════════════════════════════
+document.getElementById("adminDownloadRaw").addEventListener("click", () => {
+    if (currentIdx === null) return;
+    const f = files[currentIdx];
+    downloadBlob(new Blob([f.content], { type: "text/plain;charset=utf-8" }), f.name);
+});
+
+document.getElementById("adminDownloadEnc").addEventListener("click", async () => {
+    if (currentIdx === null || encKey.length < 8) return;
+    showToast("🔒 Chiffrement en cours…");
+    const encrypted = await encryptText(files[currentIdx].content, encKey);
+    downloadBlob(new Blob([encrypted], { type: "text/plain;charset=utf-8" }), files[currentIdx].name + ".enc");
+    showToast("✅ Fichier chiffré téléchargé", "success");
+});
+
+function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a   = document.createElement("a");
+    a.href = url; a.download = filename; a.style.display = "none";
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
+document.getElementById("adminSearch").addEventListener("input", renderAll);
+
+// ═══════════════════════════════════════════════
+//  TOAST
+// ═══════════════════════════════════════════════
+let toastTimer;
+function showToast(msg, type = "") {
+    const t = document.getElementById("toast");
+    t.textContent = msg; t.className = "show " + type;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.className = ""; }, 3000);
+}
+
+renderAll();
+</script>
+
+</body>
+</html>
